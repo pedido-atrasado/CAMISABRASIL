@@ -43,14 +43,25 @@
   }
 
   function totalAmount() {
+    function moneyFromText(text) {
+      var match = String(text || '').match(/R\$\s*([0-9]+(?:[.,][0-9]{2})?)/);
+      if (!match) return 0;
+      return parseBRL(match[1]);
+    }
+
     var payButton = Array.from(document.querySelectorAll('button')).find(function (btn) {
       var text = String(btn.textContent || '');
       return text.indexOf('Pagar') !== -1 && text.indexOf('R$') !== -1;
     });
     if (payButton) {
-      var match = String(payButton.textContent || '').match(/R\$\s*([0-9.,]+)/);
-      if (match) return parseBRL(match[1]);
+      var buttonAmount = moneyFromText(payButton.textContent || '');
+      if (buttonAmount > 0) return buttonAmount;
     }
+
+    var summaryText = String(document.body && document.body.innerText || '');
+    var summaryAmount = moneyFromText(summaryText);
+    if (summaryAmount > 0) return summaryAmount;
+
     return 89.40;
   }
 
