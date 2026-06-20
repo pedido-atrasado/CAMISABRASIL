@@ -42,6 +42,63 @@
     return '';
   }
 
+  function findInput(selectors) {
+    for (var i = 0; i < selectors.length; i += 1) {
+      var el = document.querySelector(selectors[i]);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function setInvalidField(input, invalid, message) {
+    if (!input) return;
+    input.dataset.sunizeInvalid = invalid ? 'true' : 'false';
+    input.setAttribute('aria-invalid', invalid ? 'true' : 'false');
+    input.style.borderColor = invalid ? '#ef4444' : '';
+    input.style.backgroundColor = invalid ? '#fef2f2' : '';
+    input.style.boxShadow = invalid ? '0 0 0 1px rgba(239,68,68,.35)' : '';
+    input.title = invalid && message ? message : '';
+  }
+
+  function clearInvalidState() {
+    Array.from(document.querySelectorAll('[data-sunize-invalid="true"]')).forEach(function (input) {
+      setInvalidField(input, false);
+    });
+  }
+
+  function attachValidationListeners() {
+    var selectors = [
+      'input[placeholder="João da Silva"]',
+      'input[placeholder*="Silva"]',
+      'input[placeholder="000.000.000-00"]',
+      'input[inputmode="numeric"][maxlength="14"]',
+      'input[placeholder="(00) 00000-0000"]',
+      'input[inputmode="tel"]',
+      'input[placeholder="voce@email.com"]',
+      'input[type="email"]',
+      'input[placeholder="00000-000"]',
+      'input[placeholder="123"]',
+      'input[placeholder="Rua, bairro"]',
+      'input[placeholder="Sua cidade"]',
+      'input[placeholder="SP"]',
+      'input[placeholder="Apto, bloco..."]'
+    ];
+
+    selectors.forEach(function (selector) {
+      var input = document.querySelector(selector);
+      if (!input || input.dataset.sunizeValidationBound) return;
+      input.dataset.sunizeValidationBound = 'true';
+      input.addEventListener('input', function () {
+        setInvalidField(input, false);
+      });
+      input.addEventListener('blur', function () {
+        if (String(input.dataset.sunizeInvalid || '') === 'true') {
+          validateCheckoutForm({ silent: true });
+        }
+      });
+    });
+  }
+
   function totalAmount() {
     function moneyFromText(text) {
       var match = String(text || '').match(/R\$\s*([0-9]+(?:[.,][0-9]{2})?)/);
@@ -90,6 +147,54 @@
       state: inputValue(['input[placeholder="SP"]']),
       complement: inputValue(['input[placeholder="Apto, bloco..."]']),
     };
+  }
+
+  function validateEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+  }
+
+  function validateCheckoutForm(options) {
+    var silent = !!(options && options.silent);
+    var customer = collectCustomer();
+    var invalid = [];
+    var cpfInput = findInput(['input[placeholder="000.000.000-00"]', 'input[inputmode="numeric"][maxlength="14"]']);
+    var nameInput = findInput(['input[placeholder="João da Silva"]', 'input[placeholder*="Silva"]']);
+    var phoneInput = findInput(['input[placeholder="(00) 00000-0000"]', 'input[inputmode="tel"]']);
+    var emailInput = findInput(['input[placeholder="voce@email.com"]', 'input[type="email"]']);
+    var cepInput = findInput(['input[placeholder="00000-000"]']);
+    var numberInput = findInput(['input[placeholder="123"]']);
+    var noNumberInput = document.querySelector('input[type="checkbox"]');
+    var streetInput = findInput(['input[placeholder="Rua, bairro"]']);
+    var cityInput = findInput(['input[placeholder="Sua cidade"]']);
+    var stateInput = findInput(['input[placeholder="SP"]']);
+    var complementInput = findInput(['input[placeholder="Apto, bloco..."]']);
+
+    clearInvalidState();
+
+    function mark(input, message) {
+      if (!input) return;
+      setInvalidField(input, true, message);
+      invalid.push({ input: input, message: message });
+    }
+
+    if (!String(customer.name || '').trim()) mark(nameInput, 'Informe seu nome completo');
+    if (digits(customer.cpf).length !== 11) mark(cpfInput, 'CPF inválido');
+    if (digits(customer.phone).length < 10) mark(phoneInput, 'Celular inválido');
+    if (!validateEmail(customer.email)) mark(emailInput, 'E-mail inválido');
+    if (digits(customer.cep).length !== 8) mark(cepInput, 'CEP inválido');
+    if (!String(customer.street || '').trim()) mark(streetInput, 'Informe a rua');
+    if (!String(customer.city || '').trim()) mark(cityInput, 'Informe a cidade');
+    if (!String(customer.state || '').trim() || String(customer.state || '').trim().length !== 2) mark(stateInput, 'UF inválida');
+    if (noNumberInput && !noNumberInput.checked && !String(customer.number || '').trim()) mark(numberInput, 'Informe o número');
+    if (complementInput && String(complementInput.value || '').trim() && String(complementInput.value || '').trim().length < 1) mark(complementInput, 'Complemento inválido');
+
+    if (!invalid.length) return { valid: true, customer: customer };
+
+    if (!silent) {
+      var first = invalid[0].input;
+      if (first && first.focus) first.focus();
+    }
+    return { valid: false, invalid: invalid, customer: customer };
   }
 
   function closeOverlay() {
@@ -283,6 +388,11 @@
   }
 
   async function payWithPix() {
+    var validation = validateCheckoutForm({ silent: false });
+    if (!validation.valid) {
+      return;
+    }
+
     var payload = buildPayload();
     openOverlay();
     setLoading(true);
@@ -319,4 +429,6 @@
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
     payWithPix();
   }, true);
+
+  attachValidationListeners();
 })();
