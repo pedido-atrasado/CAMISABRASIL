@@ -21,9 +21,10 @@ exports.handler = async (event) => {
     const result = await callSunize('/transactions', payload, 'POST');
 
     if (!result.ok) {
+      const data = result.data || {};
       return json(result.statusCode || 502, {
-        error: result.data.error || result.data.message || 'sunize_error',
-        raw: result.data,
+        error: data.error || data.message || result.error || 'sunize_error',
+        raw: data,
       });
     }
 
